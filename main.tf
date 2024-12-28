@@ -138,7 +138,7 @@ resource "aws_instance" "backend" {
 
 # Internal Load Balancer
 resource "aws_lb" "internal" {
-  name               = "internal-lb"
+  name               = "lb-internal-app"
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.private_sg.id]
