@@ -142,12 +142,68 @@ resource "aws_route_table_association" "private_b" {
   route_table_id = aws_route_table.private_b.id
 }
 
+# Security Groups
+resource "aws_security_group" "public_instance_sg" {
+  name        = "Public-Instance-SG"
+  vpc_id      = aws_vpc.main.id
+  description = "Security group for public instance"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "private_instance_sg" {
+  name        = "Private-Instance-SG"
+  vpc_id      = aws_vpc.main.id
+  description = "Security group for private instance"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # EC2 Instances
 resource "aws_instance" "public_instance" {
   ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = aws_subnet.public_a.id
   key_name      = var.key_name
+  security_groups = [aws_security_group.public_instance_sg.name]
   tags = {
     Name = "Public-Instance"
   }
@@ -158,6 +214,7 @@ resource "aws_instance" "private_instance" {
   instance_type = var.instance_type
   subnet_id     = aws_subnet.private_a.id
   key_name      = var.key_name
+  security_groups = [aws_security_group.private_instance_sg.name]
   tags = {
     Name = "Private-Instance"
   }
