@@ -162,14 +162,12 @@ resource "aws_instance" "private_instance" {
     Name = "Private-Instance"
   }
 }
-
 # External ALB
 resource "aws_lb" "external" {
   name               = "ALB-External"
   internal           = false
   load_balancer_type = "application"
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-  security_groups    = []
   tags = {
     Name = "External-ALB"
   }
@@ -181,8 +179,58 @@ resource "aws_lb" "internal" {
   internal           = true
   load_balancer_type = "application"
   subnets            = [aws_subnet.private_a.id, aws_subnet.private_b.id]
-  security_groups    = []
   tags = {
     Name = "Internal-ALB"
   }
+}
+
+# Target Groups
+resource "aws_lb_target_group" "backend" {
+  name        = "backend-target-group"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+}
+
+resource "aws_lb_target_group" "frontend" {
+  name        = "frontend-target-group"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+}
+
+# ALB Listeners
+resource "aws_lb_listener" "backend_listener" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+}
+
+resource "aws_lb_listener" "frontend_listener" {
+  load_balancer_arn = aws_lb.external.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+}
+
+# Target Group Attachments
+resource "aws_lb_target_group_attachment" "backend_attachment" {
+  target_group_arn = aws_lb_target_group.backend.arn
+  target_id        = aws_instance.private_instance.id
+  port             = 8080
+}
+
+resource "aws_lb_target_group_attachment" "frontend_attachment" {
+  target_group_arn = aws_lb_target_group.frontend.arn
+  target_id        = aws_instance.public_instance.id
+  port             = 80
 }
