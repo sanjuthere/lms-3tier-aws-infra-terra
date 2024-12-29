@@ -8,7 +8,7 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Subnets
+# Public Subnets
 resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr_a
@@ -19,15 +19,6 @@ resource "aws_subnet" "public_a" {
   }
 }
 
-resource "aws_subnet" "private_a" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnet_cidr_a
-  availability_zone = "${var.region}a"
-  tags = {
-    Name = "Private-Subnet-A"
-  }
-}
-
 resource "aws_subnet" "public_b" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr_b
@@ -35,6 +26,16 @@ resource "aws_subnet" "public_b" {
   availability_zone       = "${var.region}b"
   tags = {
     Name = "Public-Subnet-B"
+  }
+}
+
+# Private Subnets
+resource "aws_subnet" "private_a" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_cidr_a
+  availability_zone = "${var.region}a"
+  tags = {
+    Name = "Private-Subnet-A"
   }
 }
 
@@ -55,7 +56,38 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-# Route Table
+# NAT Gateways
+resource "aws_eip" "nat_a" {
+  vpc = true
+  tags = {
+    Name = "NAT-EIP-A"
+  }
+}
+
+resource "aws_nat_gateway" "nat_a" {
+  allocation_id = aws_eip.nat_a.id
+  subnet_id     = aws_subnet.public_a.id
+  tags = {
+    Name = "NAT-Gateway-A"
+  }
+}
+
+resource "aws_eip" "nat_b" {
+  vpc = true
+  tags = {
+    Name = "NAT-EIP-B"
+  }
+}
+
+resource "aws_nat_gateway" "nat_b" {
+  allocation_id = aws_eip.nat_b.id
+  subnet_id     = aws_subnet.public_b.id
+  tags = {
+    Name = "NAT-Gateway-B"
+  }
+}
+
+# Public Route Table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
@@ -63,7 +95,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.igw.id
   }
   tags = {
-    Name = "Public-RouteTable"
+    Name = "Public-Route-Table"
   }
 }
 
@@ -77,115 +109,80 @@ resource "aws_route_table_association" "public_b" {
   route_table_id = aws_route_table.public.id
 }
 
-# Security Groups
-resource "aws_security_group" "public_sg" {
+# Private Route Tables
+resource "aws_route_table" "private_a" {
   vpc_id = aws_vpc.main.id
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_a.id
   }
   tags = {
-    Name = "Public-SG"
+    Name = "Private-Route-Table-A"
   }
 }
 
-resource "aws_security_group" "private_sg" {
+resource "aws_route_table_association" "private_a" {
+  subnet_id      = aws_subnet.private_a.id
+  route_table_id = aws_route_table.private_a.id
+}
+
+resource "aws_route_table" "private_b" {
   vpc_id = aws_vpc.main.id
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public_a.cidr_block, aws_subnet.public_b.cidr_block]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_b.id
   }
   tags = {
-    Name = "Private-SG"
+    Name = "Private-Route-Table-B"
   }
+}
+
+resource "aws_route_table_association" "private_b" {
+  subnet_id      = aws_subnet.private_b.id
+  route_table_id = aws_route_table.private_b.id
 }
 
 # EC2 Instances
-resource "aws_instance" "frontend" {
-  ami           = "ami-0c02fb55956c7d316" # Replace with the desired AMI ID
+resource "aws_instance" "public_instance" {
+  ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = aws_subnet.public_a.id
   key_name      = var.key_name
-  security_groups = [
-    aws_security_group.public_sg.name
-  ]
   tags = {
-    Name = "Frontend-Instance"
+    Name = "Public-Instance"
   }
 }
 
-resource "aws_instance" "backend" {
-  ami           = "ami-0c02fb55956c7d316" # Replace with the desired AMI ID
+resource "aws_instance" "private_instance" {
+  ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = aws_subnet.private_a.id
   key_name      = var.key_name
-  security_groups = [
-    aws_security_group.private_sg.name
-  ]
   tags = {
-    Name = "Backend-Instance"
+    Name = "Private-Instance"
   }
 }
 
-# Load Balancers
+# External ALB
 resource "aws_lb" "external" {
   name               = "ALB-External"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.public_sg.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  security_groups    = []
+  tags = {
+    Name = "External-ALB"
+  }
 }
 
+# Internal ALB
 resource "aws_lb" "internal" {
   name               = "ALB-Internal"
   internal           = true
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.private_sg.id]
   subnets            = [aws_subnet.private_a.id, aws_subnet.private_b.id]
-}
-
-resource "aws_lb_target_group" "backend" {
-  name        = "Backend-Target-Group"
-  port        = 8080
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "instance"
-}
-
-resource "aws_lb_listener" "external_listener" {
-  load_balancer_arn = aws_lb.external.arn
-  port              = 80
-  protocol          = "HTTP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+  security_groups    = []
+  tags = {
+    Name = "Internal-ALB"
   }
-}
-
-resource "aws_lb_target_group_attachment" "backend_attachment" {
-  target_group_arn = aws_lb_target_group.backend.arn
-  target_id        = aws_instance.backend.id
-  port             = 8080
 }
