@@ -1,9 +1,9 @@
-region                 = "us-east-1"
+region                 = "ap-south-1"
 vpc_cidr               = "10.0.0.0/16"
 public_subnet_cidr_a   = "10.0.1.0/24"
 private_subnet_cidr_a  = "10.0.2.0/24"
 public_subnet_cidr_b   = "10.0.3.0/24"
 private_subnet_cidr_b  = "10.0.4.0/24"
-key_name               = "nvir01"
+key_name               = "lms"
 instance_type          = "t2.micro"
-ami_id                 = "ami-0e2c8caa4b6378d8c" # Replace with your AMI ID
+ami_id                 = "ami-053b12d3152c0cc71" # Replace with your AMI ID

@@ -9,7 +9,7 @@ resource "aws_vpc" "main" {
 }
 
 # Public Subnets
-resource "aws_subnet" "public_a" {
+  resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr_a
   map_public_ip_on_launch = true
@@ -144,7 +144,7 @@ resource "aws_route_table_association" "private_b" {
 
 # Security Groups
 resource "aws_security_group" "public_instance_sg" {
-  name        = "Public-Instance-SG"
+  name        = "public_instance_sg"
   vpc_id      = aws_vpc.main.id
   description = "Security group for public instance"
 
@@ -170,8 +170,27 @@ resource "aws_security_group" "public_instance_sg" {
   }
 }
 
+resource "aws_security_group" "External_Loadbalancer_sg" {
+  name        = "External_Loadbalancer_sg"
+  vpc_id      = aws_vpc.main.id
+  description = "Security group for public instance"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 resource "aws_security_group" "private_instance_sg" {
-  name        = "Private-Instance-SG"
+  name        = "private_instance_sg"
   vpc_id      = aws_vpc.main.id
   description = "Security group for private instance"
 
@@ -196,14 +215,33 @@ resource "aws_security_group" "private_instance_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+resource "aws_security_group" "Internal_Loadbalancer_sg" {
+  name        = "Internal_Loadbalancer_sg"
+  vpc_id      = aws_vpc.main.id
+  description = "Security group for public instance"
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
 # EC2 Instances
-resource "aws_instance" "public_instance" {
+  resource "aws_instance" "public_instance" {
   ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = aws_subnet.public_a.id
   key_name      = var.key_name
-  security_groups = [aws_security_group.public_instance_sg.name]
+  security_groups = [aws_security_group.public_instance_sg.id]
   tags = {
     Name = "Public-Instance"
   }
@@ -214,7 +252,7 @@ resource "aws_instance" "private_instance" {
   instance_type = var.instance_type
   subnet_id     = aws_subnet.private_a.id
   key_name      = var.key_name
-  security_groups = [aws_security_group.private_instance_sg.name]
+  security_groups = [aws_security_group.private_instance_sg.id]
   tags = {
     Name = "Private-Instance"
   }
@@ -225,6 +263,7 @@ resource "aws_lb" "external" {
   internal           = false
   load_balancer_type = "application"
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  security_groups    = [aws_security_group.External_Loadbalancer_sg.id]
   tags = {
     Name = "External-ALB"
   }
@@ -236,6 +275,7 @@ resource "aws_lb" "internal" {
   internal           = true
   load_balancer_type = "application"
   subnets            = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+  security_groups    = [aws_security_group.Internal_Loadbalancer_sg.id]
   tags = {
     Name = "Internal-ALB"
   }
